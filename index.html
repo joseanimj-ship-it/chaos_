@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TRPG & 자관 아카이브 뷰어 (실시간 공유 모드)</title>
+    <title>자관 백업 사이트 (TEST)</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -12,15 +12,15 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // 💡 [주의] 본인의 파이어베이스 콘솔에서 발급받은 정보로 아래를 꼭 채워넣으세요!
-  const firebaseConfig = {
-    apiKey: "AIzaSyAam1rwdM1urTB0nnekSNAsNHpTjrifULs",
-    authDomain: "trpg-archive-826f9.firebaseapp.com",
-    projectId: "trpg-archive-826f9",
-    storageBucket: "trpg-archive-826f9.firebasestorage.app",
-    messagingSenderId: "682555999188",
-    appId: "1:682555999188:web:7d40961b185888d6890c41"
-  };
+          // Your web app's Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDYZz_0tEg4aznfFk89JoGfbizOwPKS_iw",
+    authDomain: "chaos-14631.firebaseapp.com",
+    projectId: "chaos-14631",
+    storageBucket: "chaos-14631.firebasestorage.app",
+    messagingSenderId: "683013770101",
+    appId: "1:683013770101:web:1cf9c638dfadd67d12e13c"
+};
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
@@ -117,7 +117,7 @@
                     
                     <div class="bg-white p-3 rounded-xl border border-indigo-100 space-y-2">
                         <div class="flex gap-2 items-center flex-wrap">
-                            <input type="text" id="modalCharName" placeholder="캐릭터 이름 (예: 메리)" class="flex-1 min-w-[110px] px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none">
+                            <input type="text" id="modalCharName" placeholder="캐릭터 이름 (예: A)" class="flex-1 min-w-[110px] px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none">
                             <div class="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
                                 <span class="text-[11px] text-gray-500 font-bold">이름 색상</span>
                                 <input type="color" id="modalCharColor" value="#7c3aed" class="w-7 h-6 p-0 border-0 rounded cursor-pointer bg-transparent">
@@ -495,9 +495,9 @@
                             </label>
                         </div>
                     </div>
-                    <textarea placeholder="대사 앞에 [GM],[주사위], [캐릭터 이름] 을 넣으면 적용됩니다. &#10 아무것도 적지 않으면 단순한 나레이션으로 적용됩니다.&#10 코코포리아에서 추출한 HTML파일 혹은 롤20에서 추출한 코드 파일을 넣으면 자동으로 백업방식 그대로 추출됩니다. " class="w-full h-36 p-3 border border-gray-200 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-violet-500 dialogue-textarea">${initialValue || ''}</textarea>
-                `;
-            }
+                            <textarea placeholder="대사 앞에 [GM],[주사위], [캐릭터 이름] 을 넣으면 적용됩니다. &#10 아무것도 적지 않으면 단순한 나레이션으로 적용됩니다.&#10 코코포리아에서 추출한 HTML파일 혹은 롤20에서 추출한 코드 파일을 넣으면 자동으로 백업방식 그대로 추출됩니다.&#10 롤20의 경우 *대사*, **대사** 자동 적용&#10<i>대사</i> : 기울임체 / <b>대사</b> : 볼드체  " class="w-full h-36 p-3 border border-gray-200 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-violet-500 dialogue-textarea">${initialValue || ''}</textarea>
+    `;
+}
             wrapper.innerHTML = html;
             container.appendChild(wrapper);
         }
