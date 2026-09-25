@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRPG & 자관 아카이브 뷰어 (실시간 공유 모드)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 🔥 [파이어베이스 실시간 공유 설정] -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // 💡 [주의] 본인의 파이어베이스 콘솔에서 발급받은 정보로 아래를 꼭 채워넣으세요!
+  const firebaseConfig = {
+    apiKey: "AIzaSyAam1rwdM1urTB0nnekSNAsNHpTjrifULs",
+    authDomain: "trpg-archive-826f9.firebaseapp.com",
+    projectId: "trpg-archive-826f9",
+    storageBucket: "trpg-archive-826f9.firebasestorage.app",
+    messagingSenderId: "682555999188",
+    appId: "1:682555999188:web:7d40961b185888d6890c41"
+  };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // 다른 자바스크립트 함수들이 쓸 수 있도록 전역 등록
+        window.db = db;
+        window.ref = ref;
+        window.set = set;
+        window.onValue = onValue;
+
+        // 웹페이지가 켜지면 서버 데이터 실시간 감시 시작
+        if (window.initRealtimeSync) {
+            window.initRealtimeSync();
+        }
+    </script>
+</head>
+<body class="min-h-screen flex flex-col bg-[#fcfcfc] text-[#2b2b2b]">
+    <!-- 상단 배너 -->
+    <div id="headerBanner" class="w-full h-48 md:h-64 bg-cover bg-center relative shadow-inner" style="background-image: url('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1600&q=80');">
+        <div class="absolute inset-0 bg-black/30 backdrop-blur-[2px] flex flex-col justify-between p-4 md:p-6 text-white">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs md:text-sm bg-black/40 px-3 py-1 rounded-full font-medium">TRPG & Archive Hub</span>
+                    <span class="text-xs bg-emerald-500/80 text-white px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 animate-pulse">
+                        <span class="w-2 h-2 rounded-full bg-white"></span> 실시간 공유 중
+                    </span>
+                </div>
+                <button onclick="changeHeaderImage()" class="text-xs bg-white/20 hover:bg-white/35 text-white px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-image"></i> 배너 변경
+                </button>
+            </div>
+            <div>
+                <h1 id="bannerTitle" class="text-2xl md:text-4xl font-extrabold drop-shadow-md">나의 TRPG & 자관 아카이브</h1>
+                <p id="bannerSubtitle" class="text-xs md:text-sm text-gray-200 mt-1 drop-shadow">소중한 세션 기록과 썰을 백업하는 공간입니다.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 네비게이션 -->
+    <header class="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-gray-200 px-4 md:px-8 py-3 flex flex-wrap justify-between items-center gap-4 shadow-xs">
+        <div class="flex items-center gap-2 overflow-x-auto max-w-full py-1" id="categoryTabsContainer"></div>
+        <div class="flex items-center gap-2">
+            <button onclick="openCategoryManager()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium transition cursor-pointer flex items-center gap-1">
+                <i class="fa-solid fa-gear"></i> 카테고리 관리
+            </button>
+            <button onclick="openAddModal()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-plus"></i> 새 백업 추가
+            </button>
+        </div>
+    </header>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6">
+        <div class="flex flex-col md:flex-row gap-3 mb-6 justify-between items-center">
+            <div class="relative w-full md:w-80">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-gray-400 text-sm"></i>
+                <input type="text" id="searchInput" oninput="renderApp()" placeholder="제목, 소제목, 본문 검색..." class="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-xs">
+            </div>
+            <div class="text-xs text-gray-500 font-medium">총 <span id="totalCount" class="font-bold text-violet-600">0</span>개의 백업</div>
+        </div>
+        <div id="cardGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </main>
+
+    <!-- 작성/수정 모달 -->
+    <div id="editorModal" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 id="modalTitle" class="text-lg font-bold text-gray-800">새 백업 작성</h3>
+                <button onclick="closeEditorModal()" class="text-gray-400 hover:text-gray-600 p-2 cursor-pointer"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">카테고리</label>
+                        <select id="editCategory" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">썸네일 이미지 URL</label>
+                        <input type="text" id="editThumbnail" placeholder="https://..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">제목</label>
+                    <input type="text" id="editTitle" placeholder="백업 제목을 입력하세요" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none font-bold">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">소제목 / 요약</label>
+                    <input type="text" id="editSubtitle" placeholder="소제목 또는 간단한 한 줄 요약" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+                </div>
+
+                <!-- 캐릭터 설정 박스 -->
+                <div class="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-3">
+                    <label class="text-xs font-bold text-indigo-900 uppercase tracking-wider block"><i class="fa-solid fa-users-gear mr-1"></i> 캐릭터 설정 (정사각형 인장 / 색상 수동 관리) - <span class="text-violet-600 font-normal">칩 클릭 시 수정 가능</span></label>
+                    
+                    <div class="bg-white p-3 rounded-xl border border-indigo-100 space-y-2">
+                        <div class="flex gap-2 items-center flex-wrap">
+                            <input type="text" id="modalCharName" placeholder="캐릭터 이름 (예: 메리)" class="flex-1 min-w-[110px] px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none">
+                            <div class="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
+                                <span class="text-[11px] text-gray-500 font-bold">이름 색상</span>
+                                <input type="color" id="modalCharColor" value="#7c3aed" class="w-7 h-6 p-0 border-0 rounded cursor-pointer bg-transparent">
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-2 items-center pt-1">
+                            <div class="flex bg-gray-100 p-1 rounded-lg text-[11px] shrink-0">
+                                <button type="button" onclick="switchImageInputMode('url')" id="modeBtnUrl" class="px-2.5 py-1 rounded-md font-bold bg-white text-violet-700 shadow-2xs transition cursor-pointer">이미지 주소</button>
+                                <button type="button" onclick="switchImageInputMode('file')" id="modeBtnFile" class="px-2.5 py-1 rounded-md font-medium text-gray-500 transition cursor-pointer">PC 파일</button>
+                            </div>
+                            <div id="imageInputUrlContainer" class="flex-1">
+                                <input type="text" id="modalCharImgUrl" placeholder="https:// 이미지 주소" class="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none">
+                            </div>
+                            <div id="imageInputFileContainer" class="flex-1 hidden">
+                                <input type="file" id="modalCharImgFile" accept="image/*" class="w-full text-[11px] text-gray-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-violet-50 file:text-violet-700 cursor-pointer">
+                            </div>
+                            <button type="button" onclick="addCharacterToPost()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0">추가</button>
+                        </div>
+                    </div>
+
+                    <div id="modalCharList" class="flex flex-wrap gap-2 pt-1"></div>
+                </div>
+
+                <hr class="border-gray-100 my-2">
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-bold text-gray-600 uppercase tracking-wider">문서 블록 구성</label>
+                        <div class="flex gap-1.5 flex-wrap">
+                            <button onclick="addBlock('text')" class="text-xs bg-violet-50 hover:bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1"><i class="fa-solid fa-paragraph"></i> 텍스트</button>
+                            <button onclick="addBlock('image')" class="text-xs bg-violet-50 hover:bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1"><i class="fa-solid fa-image"></i> 이미지</button>
+                            <button onclick="addBlock('dialogue')" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1"><i class="fa-solid fa-comments"></i> 로그 대사 묶음</button>
+                        </div>
+                    </div>
+                    <div id="blocksContainer" class="space-y-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-200 min-h-[200px]"></div>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button onclick="closeEditorModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-semibold transition cursor-pointer">취소</button>
+                <button onclick="savePost()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-semibold transition shadow-md cursor-pointer">저장하기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상세 보기 모달 -->
+    <div id="detailModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 overflow-y-auto" onclick="if(event.target === this) closeDetailModal()">
+        <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto" onclick="event.stopPropagation()">
+            <div class="px-8 py-5 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                <div class="flex items-center gap-3">
+                    <span id="detailCategoryBadge" class="text-xs bg-violet-100 text-violet-700 px-3 py-1 rounded-full font-bold"></span>
+                    <span id="detailDate" class="text-xs text-gray-400 font-medium"></span>
+                </div>
+                <button onclick="closeDetailModal()" class="text-gray-400 hover:text-gray-600 p-2 cursor-pointer"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-8 overflow-y-auto flex-1 space-y-6">
+                <div>
+                    <h2 id="detailTitle" class="text-2xl md:text-3xl font-extrabold text-gray-900"></h2>
+                    <p id="detailSubtitle" class="text-sm md:text-base text-gray-500 mt-2 font-medium"></p>
+                </div>
+                <hr class="border-gray-100">
+                <div id="detailContentContainer" class="space-y-4 text-gray-800 leading-relaxed"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 카테고리 관리 모달 -->
+    <div id="categoryModal" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">카테고리 관리</h3>
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="newCategoryName" placeholder="새 카테고리 이름" class="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-violet-500">
+                <button onclick="addNewCategory()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer">추가</button>
+            </div>
+            <div id="categoryListContainer" class="space-y-2 max-h-60 overflow-y-auto mb-4"></div>
+            <div class="flex justify-end">
+                <button onclick="closeCategoryManager()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-semibold transition cursor-pointer">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let categories = ['썰', '그림', '글', '페어제', '커미션', 'TRPG'];
+        let currentCategoryFilter = '전체';
+        let currentEditId = null;
+        let editingPostCharacters = [];
+        let currentImgMode = 'url';
+        
+        // 🔄 데이터 저장소를 클라우드 서버 기준으로 기본값 세팅
+        let posts = [];
+        let headerBannerData = {
+            url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1600&q=80',
+            title: '나의 TRPG & 자관 아카이브',
+            subtitle: '소중한 세션 기록과 썰을 백업하는 공간입니다.'
+        };
+
+        // ⚡ [실시간 동기화 리스너] 서버의 데이터가 바뀔 때마다 자동으로 실행됨
+        window.initRealtimeSync = function() {
+            if (!window.db) return;
+            const archiveRef = window.ref(window.db, 'archive_data');
+            
+            window.onValue(archiveRef, (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    if (data.posts) posts = data.posts;
+                    if (data.categories) categories = data.categories;
+                    if (data.banner) headerBannerData = data.banner;
+                } else {
+                    // 최초 접속 시 데이터가 비어있다면 기본 데이터 서버에 세팅
+                    saveDataToFirebase();
+                }
+                applyHeaderBanner();
+                renderCategoryTabs();
+                renderApp();
+            });
+        };
+
+        // ☁️ 브라우저가 아닌 파이어베이스 서버에 데이터 저장
+        function saveDataToFirebase() {
+            if (!window.db) {
+                console.warn("Firebase 미연동 상태: 임시 로컬 저장소에 보관합니다.");
+                localStorage.setItem('trpg_archive_posts', JSON.stringify(posts));
+                localStorage.setItem('trpg_archive_banner', JSON.stringify(headerBannerData));
+                return;
+            }
+            const archiveRef = window.ref(window.db, 'archive_data');
+            window.set(archiveRef, {
+                posts: posts,
+                categories: categories,
+                banner: headerBannerData
+            }).catch((error) => {
+                console.error("서버 저장 실패:", error);
+            });
+        }
+
+        // 기존 saveData 호출을 서버 저장으로 연결
+        function saveData() {
+            saveDataToFirebase();
+        }
+
+        window.onload = () => { 
+            applyHeaderBanner(); 
+            renderCategoryTabs(); 
+            renderApp(); 
+            // 만약 파이어베이스가 늦게 로딩될 경우 대비한 안전장치
+            setTimeout(() => {
+                if (window.initRealtimeSync && window.db) {
+                    window.initRealtimeSync();
+                }
+            }, 500);
+        };
+
+        function applyHeaderBanner() {
+            document.getElementById('headerBanner').style.backgroundImage = `url('${headerBannerData.url}')`;
+            document.getElementById('bannerTitle').textContent = headerBannerData.title;
+            document.getElementById('bannerSubtitle').textContent = headerBannerData.subtitle;
+        }
+
+        function changeHeaderImage() {
+            const newUrl = prompt('배너 이미지 URL:', headerBannerData.url);
+            if (newUrl) {
+                headerBannerData.url = newUrl;
+                headerBannerData.title = prompt('배너 타이틀:', headerBannerData.title) || headerBannerData.title;
+                headerBannerData.subtitle = prompt('배너 소제목:', headerBannerData.subtitle) || headerBannerData.subtitle;
+                saveData(); applyHeaderBanner();
+            }
+        }
+
+        function renderCategoryTabs() {
+            const container = document.getElementById('categoryTabsContainer');
+            let html = `<button onclick="setCategoryFilter('전체')" class="px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition cursor-pointer ${currentCategoryFilter === '전체' ? 'bg-violet-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">전체 보기</button>`;
+            categories.forEach(cat => {
+                html += `<button onclick="setCategoryFilter('${cat}')" class="px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition cursor-pointer ${currentCategoryFilter === cat ? 'bg-violet-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">${cat}</button>`;
+            });
+            container.innerHTML = html;
+            const editCatSelect = document.getElementById('editCategory');
+            if(editCatSelect) {
+                editCatSelect.innerHTML = categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+            }
+        }
+
+        function setCategoryFilter(cat) { currentCategoryFilter = cat; renderCategoryTabs(); renderApp(); }
+
+        function renderApp() {
+            const searchInput = document.getElementById('searchInput');
+            const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+            const grid = document.getElementById('cardGrid');
+            if(!grid) return;
+
+            let filtered = posts.filter(p => (currentCategoryFilter === '전체' || p.category === currentCategoryFilter) && (p.title.toLowerCase().includes(searchQuery) || p.subtitle.toLowerCase().includes(searchQuery)));
+            document.getElementById('totalCount').textContent = filtered.length;
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-16 text-center text-gray-400 bg-white rounded-2xl border border-gray-100"><i class="fa-solid fa-folder-open text-4xl mb-3 text-gray-300"></i><p class="text-sm">등록된 백업이 없습니다.</p></div>`;
+                return;
+            }
+
+            grid.innerHTML = filtered.map(post => {
+                let thumb = post.thumbnail || ((post.blocks || []).find(b => b.type === 'image') || {}).value || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80';
+                let preview = ((post.blocks || []).find(b => b.type === 'text') || {}).value || '';
+                return `
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition flex flex-col overflow-hidden group">
+                        <div class="h-44 w-full overflow-hidden bg-gray-100 relative cursor-pointer" onclick="openDetailModal(${post.id})">
+                            <img src="${thumb}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                            <span class="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[11px] px-2.5 py-1 rounded-full font-bold">${post.category}</span>
+                        </div>
+                        <div class="p-5 flex-1 cursor-pointer" onclick="openDetailModal(${post.id})">
+                            <h3 class="font-bold text-base text-gray-900 line-clamp-1 group-hover:text-violet-600">${post.title}</h3>
+                            <p class="text-xs font-medium text-violet-500 mt-0.5 line-clamp-1">${post.subtitle || ''}</p>
+                            <p class="text-xs text-gray-500 mt-2 line-clamp-2">${preview.replace(/<[^>]*>?/gm, '')}</p>
+                        </div>
+                        <div class="px-5 py-3 border-t border-gray-50 bg-gray-50/50 flex justify-between items-center text-xs">
+                            <span class="text-gray-400">${new Date(post.id).toLocaleDateString()}</span>
+                            <div class="flex gap-2">
+                                <button onclick="openEditModal(${post.id})" class="text-gray-500 hover:text-violet-600 p-1 cursor-pointer"><i class="fa-solid fa-pen"></i></button>
+                                <button onclick="deletePost(${post.id})" class="text-gray-400 hover:text-red-500 p-1 cursor-pointer"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function openAddModal() {
+            currentEditId = null;
+            document.getElementById('modalTitle').textContent = '새 백업 작성';
+            document.getElementById('editCategory').value = categories[0];
+            document.getElementById('editTitle').value = '';
+            document.getElementById('editSubtitle').value = '';
+            document.getElementById('editThumbnail').value = '';
+            editingPostCharacters = [];
+            renderModalCharacters();
+            document.getElementById('blocksContainer').innerHTML = '';
+            addBlock('text');
+            document.getElementById('editorModal').classList.remove('hidden');
+        }
+
+        function openEditModal(id) {
+            currentEditId = id;
+            const post = posts.find(p => p.id === id);
+            if (!post) return;
+            document.getElementById('modalTitle').textContent = '백업 수정';
+            document.getElementById('editCategory').value = post.category;
+            document.getElementById('editTitle').value = post.title;
+            document.getElementById('editSubtitle').value = post.subtitle;
+            document.getElementById('editThumbnail').value = post.thumbnail || '';
+            editingPostCharacters = post.characters ? JSON.parse(JSON.stringify(post.characters)) : [];
+            renderModalCharacters();
+
+            const container = document.getElementById('blocksContainer');
+            container.innerHTML = '';
+            (post.blocks || []).forEach(b => addBlock(b.type, b.value));
+            document.getElementById('editorModal').classList.remove('hidden');
+        }
+
+        function closeEditorModal() { document.getElementById('editorModal').classList.add('hidden'); }
+
+        function switchImageInputMode(mode) {
+            currentImgMode = mode;
+            if (mode === 'url') {
+                document.getElementById('imageInputUrlContainer').classList.remove('hidden');
+                document.getElementById('imageInputFileContainer').classList.add('hidden');
+                document.getElementById('modeBtnUrl').className = 'px-2.5 py-1 rounded-md font-bold bg-white text-violet-700 shadow-2xs transition cursor-pointer';
+                document.getElementById('modeBtnFile').className = 'px-2.5 py-1 rounded-md font-medium text-gray-500 transition cursor-pointer';
+            } else {
+                document.getElementById('imageInputUrlContainer').classList.add('hidden');
+                document.getElementById('imageInputFileContainer').classList.remove('hidden');
+                document.getElementById('modeBtnFile').className = 'px-2.5 py-1 rounded-md font-bold bg-white text-violet-700 shadow-2xs transition cursor-pointer';
+                document.getElementById('modeBtnUrl').className = 'px-2.5 py-1 rounded-md font-medium text-gray-500 transition cursor-pointer';
+            }
+        }
+
+        function renderModalCharacters() {
+            const container = document.getElementById('modalCharList');
+            if (editingPostCharacters.length === 0) {
+                container.innerHTML = `<span class="text-xs text-gray-400 italic">등록된 캐릭터가 없습니다. 아래에서 직접 캐릭터를 추가해주세요.</span>`;
+                return;
+            }
+            container.innerHTML = editingPostCharacters.map((c, i) => `
+                <div onclick="editCharacter(${i})" class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border text-xs shadow-2xs cursor-pointer hover:border-violet-400 transition" title="클릭해서 수정">
+                    ${c.image ? `<img src="${c.image}" class="w-8 h-8 object-cover rounded-md">` : `<span class="w-4 h-4 rounded-full inline-block" style="background-color: ${c.color}"></span>`}
+                    <span class="font-bold text-gray-700">${c.name}</span>
+                    <button type="button" onclick="event.stopPropagation(); editingPostCharacters.splice(${i},1); renderModalCharacters();" class="text-gray-400 hover:text-red-500 ml-1 p-1"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function editCharacter(index) {
+            const targetChar = editingPostCharacters[index];
+            const newName = prompt("수정할 캐릭터 이름을 입력하세요:", targetChar.name);
+            if (newName !== null && newName.trim() !== "") {
+                editingPostCharacters[index].name = newName.trim();
+                renderModalCharacters();
+            }
+        }
+
+        function addCharacterToPost() {
+            let name = document.getElementById('modalCharName').value.trim();
+            const color = document.getElementById('modalCharColor').value;
+            if (!name) { alert('캐릭터 이름을 입력해주세요.'); return; }
+            if (editingPostCharacters.some(c => c.name === name)) { alert('이미 등록된 캐릭터 이름입니다.'); return; }
+
+            if (currentImgMode === 'url') {
+                const image = document.getElementById('modalCharImgUrl').value.trim();
+                editingPostCharacters.push({ name, color, image });
+                document.getElementById('modalCharImgUrl').value = '';
+                document.getElementById('modalCharName').value = '';
+                renderModalCharacters();
+            } else {
+                const fileInput = document.getElementById('modalCharImgFile');
+                const file = fileInput.files[0];
+                if (!file) {
+                    editingPostCharacters.push({ name, color, image: '' });
+                    document.getElementById('modalCharName').value = '';
+                    renderModalCharacters();
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    editingPostCharacters.push({ name, color, image: e.target.result });
+                    document.getElementById('modalCharName').value = '';
+                    fileInput.value = '';
+                    renderModalCharacters();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function addBlock(type, initialValue = null) {
+            const container = document.getElementById('blocksContainer');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bg-white p-4 rounded-xl border border-gray-200 shadow-2xs relative group block-item';
+            wrapper.setAttribute('data-block-type', type);
+            let html = `
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-[11px] font-bold text-violet-600 uppercase">${type === 'text' ? '📝 텍스트 블록' : type === 'image' ? '🖼️ 이미지 블록' : '💬 로그 대사 묶음'}</span>
+                    <div class="flex items-center gap-1">
+                        <button onclick="moveBlock(this, 'up')" class="text-gray-400 hover:text-gray-600 p-1 text-xs cursor-pointer"><i class="fa-solid fa-arrow-up"></i></button>
+                        <button onclick="moveBlock(this, 'down')" class="text-gray-400 hover:text-gray-600 p-1 text-xs cursor-pointer"><i class="fa-solid fa-arrow-down"></i></button>
+                        <button onclick="this.closest('.block-item').remove()" class="text-gray-400 hover:text-red-500 p-1 text-xs cursor-pointer ml-2"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>
+            `;
+            if (type === 'text') {
+                html += `
+                    <div class="flex gap-1 mb-2 bg-gray-50 p-1.5 rounded-lg border text-xs flex-wrap">
+                        <button type="button" onclick="formatText(this, '<b>', '</b>')" class="px-2 py-1 bg-white border rounded font-bold hover:bg-gray-100 cursor-pointer">굵게</button>
+                        <button type="button" onclick="formatText(this, '<i>', '</i>')" class="px-2 py-1 bg-white border rounded italic hover:bg-gray-100 cursor-pointer">기울임</button>
+                        <button type="button" onclick="formatText(this, '<mark>', '</mark>')" class="px-2 py-1 bg-white border rounded bg-yellow-100 hover:bg-gray-100 cursor-pointer">형광펜</button>
+                    </div>
+                    <textarea placeholder="내용 입력..." class="w-full h-28 p-3 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-violet-500 text-input-area">${initialValue || ''}</textarea>
+                `;
+            } else if (type === 'image') {
+                let imgVal = (initialValue && !initialValue.startsWith('data:')) ? initialValue : '';
+                let base64Val = (initialValue && initialValue.startsWith('data:')) ? initialValue : '';
+                html += `
+                    <div class="space-y-2">
+                        <input type="file" accept="image/*" onchange="handleImageUpload(this)" class="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-violet-50 file:text-violet-700 cursor-pointer">
+                        <input type="text" placeholder="또는 이미지 URL" value="${imgVal}" class="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none image-url-input">
+                        <input type="hidden" class="image-base64-input" value="${base64Val}">
+                        <div class="image-preview mt-2">${initialValue ? `<img src="${initialValue}" class="h-32 object-cover rounded-lg border">` : ''}</div>
+                    </div>
+                `;
+            } else if (type === 'dialogue') {
+                html += `
+                    <div class="mb-2 flex items-center justify-between bg-indigo-50/70 p-2 rounded-lg border border-indigo-100 flex-wrap gap-2">
+                        <span class="text-[11px] font-bold text-indigo-700"><i class="fa-solid fa-file-arrow-up mr-1"></i> 로그 파일 백업하기</span>
+                        <div class="flex gap-1.5">
+                            <label class="text-[11px] text-gray-500 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-indigo-600 file:text-white cursor-pointer bg-indigo-600 text-white px-2.5 py-1 rounded-md font-semibold hover:bg-indigo-700 transition">
+                                <i class="fa-solid fa-file-code mr-1"></i> 코코포리아 HTML 업로드
+                                <input type="file" accept=".html,.htm" onchange="handleLogHtmlUpload(this)" class="hidden">
+                            </label>
+                            <label class="text-[11px] text-gray-500 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-slate-700 file:text-white cursor-pointer bg-slate-700 text-white px-2.5 py-1 rounded-md font-semibold hover:bg-slate-800 transition">
+                                <i class="fa-solid fa-file-lines mr-1"></i> 롤20 로그 업로드 (HTML/TXT)
+                                <input type="file" accept=".html,.htm,.txt" onchange="handleRoll20FileUpload(this)" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+                    <textarea placeholder="대사 앞에 [GM],[주사위], [캐릭터 이름] 을 넣으면 적용됩니다. &#10 아무것도 적지 않으면 단순한 나레이션으로 적용됩니다.&#10 코코포리아에서 추출한 HTML파일 혹은 롤20에서 추출한 코드 파일을 넣으면 자동으로 백업방식 그대로 추출됩니다. " class="w-full h-36 p-3 border border-gray-200 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-violet-500 dialogue-textarea">${initialValue || ''}</textarea>
+                `;
+            }
+            wrapper.innerHTML = html;
+            container.appendChild(wrapper);
+        }
+
+        function handleRoll20FileUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const fileContent = e.target.result;
+                let parsedLines = [];
+
+                function cleanSpeaker(raw) {
+                    if (!raw) return '';
+                    let cleaned = raw.replace(/<img[^>]*>/gi, '').trim();
+                    cleaned = cleaned.replace(/^[:\s-]+/, '').replace(/[:\s-]+$/, '').trim();
+                    cleaned = cleaned.replace(/\[\s*main\s*\]/gi, '').replace(/\[\s*system\s*\]/gi, '').trim();
+                    cleaned = cleaned.replace(/\s*\(gm\)/gi, '').trim();
+                    return cleaned;
+                }
+
+                function convertRoll20Formatting(text) {
+                    if (!text) return '';
+                    let temp = text;
+                    temp = temp.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '<b>$1</b>');
+                    temp = temp.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '<i>$1</i>');
+                    temp = temp.replace(/<img[^>]*>/gi, '');
+                    temp = temp.replace(/<\/?(?!b|i|strong|em|mark)\w+\b[^>]*>/gi, '');
+                    return temp.trim();
+                }
+
+                function sanitizeContent(speaker, content) {
+                    if (!content) return '';
+                    let cleaned = content;
+                    if (speaker) {
+                        let pattern1 = new RegExp('^' + speaker + '\\s*:\\s*', 'i');
+                        cleaned = cleaned.replace(pattern1, '');
+                        let pattern2 = new RegExp('^' + speaker + '\\s*\\(gm\\)\\s*:\\s*', 'i');
+                        cleaned = cleaned.replace(pattern2, '');
+                    }
+                    return cleaned.trim();
+                }
+
+                function isDiceRollText(text) {
+                    if (!text) return false;
+                    return /CC\s*<=/i.test(text) ||
+                        /주사위/i.test(text) ||
+                        /rolls/i.test(text) ||
+                        /기준치/i.test(text) ||
+                        /판정결과\s*:/i.test(text) ||
+                        text.toLowerCase().startsWith('<table style');
+                }
+
+                function cleanDiceText(text) {
+                    if (!text) return '';
+                    let cleaned = text.replace(/기준치\s*[:]?/g, '');
+                    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+                    return cleaned;
+                }
+
+                if (file.name.endsWith('.html') || file.name.endsWith('.htm') || fileContent.includes('<div') || fileContent.includes('class="message')) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(fileContent, 'text/html');
+                    const messageElements = doc.querySelectorAll('.message, .talk, div[class*="chat"], div[class*="log"], p');
+
+                    let lastSpeaker = '';
+                    if (messageElements.length > 0) {
+                        messageElements.forEach(el => {
+                            let classListAttr = el.className || '';
+                            let isDescClass = classListAttr.toLowerCase().includes('message desc') || classListAttr.toLowerCase().includes('desc');
+                            let outerHtmlCheck = el.outerHTML.trim().toLowerCase();
+
+                            if (outerHtmlCheck.startsWith('<table style')) {
+                                let tableText = el.innerText || el.textContent || '';
+                                tableText = cleanDiceText(tableText.replace(/\s+/g, ' '));
+                                parsedLines.push(`[주사위] ${tableText}`);
+                                lastSpeaker = '';
+                                return;
+                            }
+
+                            let speakerEl = el.querySelector('.by, .speaker, .name, strong, b');
+                            let rawSpeakerText = speakerEl ? (speakerEl.innerText || speakerEl.innerHTML) : '';
+
+                            if (speakerEl) {
+                                let outerHtml = speakerEl.outerHTML || '';
+                                if (speakerEl.tagName === 'B' || speakerEl.tagName === 'STRONG' || outerHtml.includes('<b>') || outerHtml.includes('<strong>') || rawSpeakerText.includes('<b>')) {
+                                    speakerEl = null;
+                                }
+                            }
+
+                            let speaker = speakerEl ? cleanSpeaker(rawSpeakerText) : '';
+                            let content = el.innerHTML.trim();
+
+                            if (isDescClass || classListAttr.toLowerCase().includes('desc')) {
+                                let descContent = el.innerText || content;
+                                descContent = descContent.replace(/<[^>]*>?/gm, '').trim();
+                                parsedLines.push(`[GM] ${descContent}`);
+                                lastSpeaker = '';
+                                return;
+                            }
+
+                            if (speakerEl && content.startsWith(speakerEl.outerHTML)) {
+                                content = content.replace(speakerEl.outerHTML, '').replace(/^[:\s-]+/, '').trim();
+                            }
+                            content = convertRoll20Formatting(content);
+
+                            if (!speaker && content.includes(':')) {
+                                let parts = content.split(':');
+                                let possibleName = cleanSpeaker(parts[0]);
+                                if (possibleName.length <= 25 && !parts[0].includes('<b>') && !parts[0].includes('<strong>')) {
+                                    speaker = possibleName;
+                                    content = parts.slice(1).join(':').trim();
+                                }
+                            }
+
+                            let fullCheckText = speaker ? `${speaker} ${content}` : content;
+
+                            if (isDiceRollText(fullCheckText) || isDiceRollText(content)) {
+                                let pureContent = sanitizeContent(speaker, content);
+                                pureContent = cleanDiceText(pureContent);
+                                if (speaker) {
+                                    parsedLines.push(`[주사위] [${speaker}] ${pureContent}`);
+                                } else {
+                                    parsedLines.push(`[주사위] ${pureContent}`);
+                                }
+                                lastSpeaker = '';
+                                return;
+                            }
+
+                            if (!speaker && lastSpeaker && !isDiceRollText(content)) {
+                                speaker = lastSpeaker;
+                            } else if (speaker) {
+                                lastSpeaker = speaker;
+                            }
+
+                            content = sanitizeContent(speaker, content);
+
+                            if (content) {
+                                parsedLines.push(speaker ? `[${speaker}] ${content}` : content);
+                            }
+                        });
+                    }
+                } else {
+                    const rawLines = fileContent.split('\n');
+                    let tempMessages = [];
+                    let lastSpeaker = '';
+
+                    rawLines.forEach(rawLine => {
+                        let line = rawLine.trim();
+                        if (!line) return;
+
+                        let cleanLine = line.replace(/^\[\d{2}:\d{2}(?::\d{2})?\]\s*/, '').trim();
+                        cleanLine = cleanLine.replace(/<img[^>]*>/gi, '').trim();
+                        if (!cleanLine || cleanLine === '(GM):' || cleanLine === ':') return;
+
+                        let colonIdx = cleanLine.indexOf(':');
+                        let isNewSpeakerPattern = false;
+                        let currentSpeaker = '';
+                        let currentContent = cleanLine;
+
+                        if (isDiceRollText(cleanLine)) {
+                            tempMessages.push({ speaker: '주사위', content: cleanLine, isDice: true });
+                            lastSpeaker = '';
+                            return;
+                        }
+
+                        if (colonIdx !== -1 && colonIdx < 30 && !cleanLine.startsWith('http')) {
+                            let candidate = cleanSpeaker(cleanLine.substring(0, colonIdx));
+                            if (candidate && !candidate.includes(' ') && !candidate.includes('<b>') && !candidate.includes('<strong>')) {
+                                isNewSpeakerPattern = true;
+                                currentSpeaker = candidate;
+                                currentContent = cleanLine.substring(colonIdx + 1).trim();
+                            }
+                        } else {
+                            let bracketMatch = cleanLine.match(/^\[(.*?)\]\s*(.*)$/);
+                            if (bracketMatch && !bracketMatch[1].includes('<b>') && !bracketMatch[1].includes('<strong>')) {
+                                isNewSpeakerPattern = true;
+                                currentSpeaker = cleanSpeaker(bracketMatch[1]);
+                                currentContent = bracketMatch[2].trim();
+                            }
+                        }
+
+                        if (isNewSpeakerPattern && currentSpeaker) {
+                            currentContent = sanitizeContent(currentSpeaker, currentContent);
+                            tempMessages.push({ speaker: currentSpeaker, content: currentContent, isDice: isDiceRollText(currentContent) || isDiceRollText(cleanLine) });
+                            lastSpeaker = currentSpeaker;
+                        } else {
+                            let isDice = isDiceRollText(cleanLine);
+                            if (tempMessages.length > 0 && lastSpeaker && !isDice) {
+                                currentContent = sanitizeContent(lastSpeaker, cleanLine);
+                                tempMessages.push({ speaker: lastSpeaker, content: currentContent, isDice: false });
+                            } else {
+                                tempMessages.push({ speaker: '', content: cleanLine, isDice: isDice });
+                            }
+                        }
+                    });
+
+                    tempMessages.forEach(msg => {
+                        let content = convertRoll20Formatting(msg.content);
+                        content = sanitizeContent(msg.speaker, content);
+
+                        let combinedMsgText = msg.speaker ? `${msg.speaker} ${content}` : content;
+                        if (msg.isDice || isDiceRollText(content) || isDiceRollText(combinedMsgText)) {
+                            let pureContent = cleanDiceText(content);
+                            if (msg.speaker) {
+                                parsedLines.push(`[주사위] [${msg.speaker}] ${pureContent}`);
+                            } else {
+                                parsedLines.push(`[주사위] ${pureContent}`);
+                            }
+                        } else if (msg.speaker) {
+                            parsedLines.push(`[${msg.speaker}] ${content}`);
+                        } else {
+                            parsedLines.push(content);
+                        }
+                    });
+                }
+
+                const textarea = input.closest('.block-item').querySelector('.dialogue-textarea');
+                textarea.value = parsedLines.join('\n');
+                input.value = '';
+                alert(`롤20 로그 파싱이 완료되었습니다!`);
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        function handleLogHtmlUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const htmlText = e.target.result;
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+
+                const messageElements = doc.querySelectorAll('.message, .talk, div[class*="chat"], div[class*="log"], p');
+                let parsedLines = [];
+
+                function cleanSpeaker(raw) {
+                    if (!raw) return '';
+                    let cleaned = raw.replace(/\[\s*main\s*\]/gi, '').replace(/\[\s*system\s*\]/gi, '').trim();
+                    cleaned = cleaned.replace(/\s*\(GM\)\s*/gi, '').trim();
+                    return cleaned;
+                }
+
+                function parseAndFormatLine(rawSpeaker, rawContent) {
+                    let speaker = cleanSpeaker(rawSpeaker);
+                    let content = (rawContent || '').trim();
+
+                    if (content.includes(':')) {
+                        let parts = content.split(':');
+                        let possibleName = cleanSpeaker(parts[0]);
+                        let possibleContent = parts.slice(1).join(':').trim();
+                        if (possibleName && (!speaker || possibleName.toLowerCase() === speaker.toLowerCase() || possibleName.length <= 10)) {
+                            if (!speaker) speaker = possibleName;
+                            content = possibleContent;
+                        }
+                    }
+
+                    let combinedCheck = (speaker ? `[${speaker}] ` : '') + content;
+
+                    if (/CC\s*<=/i.test(combinedCheck)) {
+                        return speaker ? `[주사위] ${speaker} ${content}` : `[주사위] ${content}`;
+                    }
+
+                    return content ? (speaker ? `[${speaker}] ${content}` : content) : '';
+                }
+
+                if (messageElements.length > 0) {
+                    messageElements.forEach(el => {
+                        const speakerEl = el.querySelector('.by, .speaker, .name, strong');
+                        let speaker = speakerEl ? speakerEl.innerText.trim() : '';
+                        let content = el.innerText.trim();
+
+                        if (speakerEl && content.startsWith(speaker)) {
+                            content = content.replace(speaker, '').replace(/^[:\s-]+/, '').trim();
+                        }
+
+                        let formatted = parseAndFormatLine(speaker, content);
+                        if (formatted) parsedLines.push(formatted);
+                    });
+                }
+
+                if (parsedLines.length === 0) {
+                    const bodyText = doc.body ? doc.body.innerText : htmlText;
+                    parsedLines = bodyText.split('\n').map(l => {
+                        let line = l.trim();
+                        if (!line) return '';
+                        let match = line.match(/^\[(.*?)\]\s*(.*)$/);
+                        if (match) {
+                            return parseAndFormatLine(match[1], match[2]);
+                        }
+                        return parseAndFormatLine('', line);
+                    }).filter(l => l.length > 0);
+                }
+
+                const textarea = input.closest('.block-item').querySelector('.dialogue-textarea');
+                textarea.value = parsedLines.join('\n');
+                input.value = '';
+                alert(`코코포리아 HTML 로그 파싱이 완료되었습니다!`);
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        function formatText(btn, openTag, closeTag) {
+            const textarea = btn.closest('.block-item').querySelector('.text-input-area');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+            textarea.value = text.substring(0, start) + openTag + text.substring(start, end) + closeTag + text.substring(end);
+            textarea.focus();
+            textarea.setSelectionRange(start + openTag.length, end + openTag.length);
+        }
+
+        function handleImageUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64 = e.target.result;
+                const wrapper = input.closest('.block-item');
+                wrapper.querySelector('.image-base64-input').value = base64;
+                wrapper.querySelector('.image-url-input').value = '';
+                wrapper.querySelector('.image-preview').innerHTML = `<img src="${base64}" class="h-32 object-cover rounded-lg border">`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function moveBlock(btn, dir) {
+            const item = btn.closest('.block-item');
+            if (dir === 'up' && item.previousElementSibling) item.parentNode.insertBefore(item, item.previousElementSibling);
+            else if (dir === 'down' && item.nextElementSibling) item.parentNode.insertBefore(item.nextElementSibling, item);
+        }
+
+        function savePost() {
+            let category = document.getElementById('editCategory').value;
+            let title = document.getElementById('editTitle').value.trim();
+            let subtitle = document.getElementById('editSubtitle').value.trim();
+            let thumbnail = document.getElementById('editThumbnail').value.trim();
+            let characters = JSON.parse(JSON.stringify(editingPostCharacters));
+            if (!title) { alert('제목을 입력해주세요!'); return; }
+
+            let blocks = [];
+            document.querySelectorAll('.block-item').forEach(item => {
+                const type = item.getAttribute('data-block-type');
+                if (type === 'text') {
+                    const val = item.querySelector('.text-input-area').value;
+                    if (val.trim()) blocks.push({ type, value: val });
+                } else if (type === 'image') {
+                    const val = item.querySelector('.image-base64-input').value || item.querySelector('.image-url-input').value.trim();
+                    if (val) blocks.push({ type, value: val });
+                } else if (type === 'dialogue') {
+                    const val = item.querySelector('.dialogue-textarea').value;
+                    if (val.trim()) blocks.push({ type, value: val });
+                }
+            });
+
+            if (currentEditId) {
+                const idx = posts.findIndex(p => p.id === currentEditId);
+                if (idx !== -1) posts[idx] = { ...posts[idx], category, title, subtitle, thumbnail, characters, blocks };
+            } else {
+                posts.unshift({ id: Date.now(), category, title, subtitle, thumbnail, characters, blocks });
+            }
+            saveData(); closeEditorModal(); renderApp();
+        }
+
+        function deletePost(id) {
+            if (confirm('삭제하시겠습니까?')) { posts = posts.filter(p => p.id !== id); saveData(); renderApp(); }
+        }
+
+        function openDetailModal(id) {
+            const post = posts.find(p => p.id === id);
+            if (!post) return;
+            document.getElementById('detailCategoryBadge').textContent = post.category;
+            document.getElementById('detailDate').textContent = new Date(post.id).toLocaleString();
+            document.getElementById('detailTitle').textContent = post.title;
+            document.getElementById('detailSubtitle').textContent = post.subtitle || '';
+            const container = document.getElementById('detailContentContainer');
+            container.innerHTML = '';
+            
+            const postChars = post.characters || [];
+
+            (post.blocks || []).forEach(b => {
+                const div = document.createElement('div');
+                if (b.type === 'text') {
+                    div.className = 'text-gray-800 whitespace-pre-wrap text-sm md:text-base leading-relaxed py-1';
+                    div.innerHTML = b.value;
+                } else if (b.type === 'image') {
+                    div.className = 'my-3 text-center bg-gray-50 rounded-2xl overflow-hidden border border-gray-100';
+                    div.innerHTML = `<img src="${b.value}" class="max-h-[500px] w-full object-contain mx-auto">`;
+                } else if (b.type === 'dialogue') {
+                    div.className = 'space-y-4 my-3';
+                    let html = '';
+                    b.value.split('\n').forEach(line => {
+                        if (!line.trim()) return;
+                        let trimmed = line.trim();
+                        let name = '';
+                        let content = '';
+
+                        if (trimmed.startsWith('[주사위]')) {
+                            let diceContent = trimmed.replace('[주사위]', '').trim();
+                            html += `
+                                <div class="my-2 py-2 px-4 bg-slate-100 border border-slate-200 text-xs md:text-sm text-slate-700 rounded-xl shadow-2xs flex items-center gap-2.5 font-mono">
+                                    <i class="fa-solid fa-dice text-violet-600 text-base"></i>
+                                    <div class="flex-1">${diceContent}</div>
+                                </div>
+                            `;
+                            return;
+                        }
+
+                        let bracketMatch = trimmed.match(/^\[(.*?)\]\s*(.*)$/);
+                        if (bracketMatch) {
+                            name = bracketMatch[1].replace(/<[^>]*>/g, '').replace(/\[\s*main\s*\]/gi, '').replace(/\s*\(gm\)/gi, '').trim();
+                            content = bracketMatch[2].trim();
+                        } else if (trimmed.includes(':')) {
+                            const parts = trimmed.split(':');
+                            name = parts[0].replace(/<[^>]*>/g, '').replace(/\[\s*main\s*\]/gi, '').replace(/\s*\(gm\)/gi, '').trim();
+                            content = parts.slice(1).join(':').trim();
+                        } else {
+                            content = trimmed;
+                        }
+
+                        if (!name) {
+                            html += `
+                                <div class="text-center my-3 py-2 px-4 bg-gray-50 border-y border-gray-200 text-xs md:text-sm text-gray-700 italic rounded">
+                                    ${trimmed}
+                                </div>
+                            `;
+                        } else if (name.toUpperCase().includes('GM')) {
+                            html += `
+                                <div class="my-3 py-2.5 px-4 bg-amber-50/70 border-l-4 border-amber-400 text-xs md:text-sm text-amber-900 rounded-r-lg shadow-2xs flex items-start gap-2">
+                                    <i class="fa-solid fa-bullhorn mt-0.5 text-amber-600"></i>
+                                    <div class="flex-1 whitespace-pre-wrap leading-relaxed"><strong class="mr-1 text-amber-800">[${name}]</strong>${content}</div>
+                                </div>
+                            `;
+                        } else if (name) {
+                            const charInfo = postChars.find(c => c.name === name);
+                            let standingHtml = charInfo && charInfo.image 
+                                ? `<img src="${charInfo.image}" class="w-12 h-12 md:w-14 md:h-14 object-cover rounded-xl shrink-0 shadow-xs border border-gray-100">` 
+                                : `<div class="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-[10px] text-gray-500 shrink-0 text-center px-1 overflow-hidden">${name}</div>`;
+
+                            html += `
+                                <div class="flex items-center gap-3 py-2 border-b border-gray-100 last:border-b-0">
+                                    <div class="flex flex-col items-center shrink-0">
+                                        ${standingHtml}
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="text-xs md:text-sm font-bold mb-1" style="color: ${charInfo ? charInfo.color : '#374151'};">${name}</div>
+                                        <div class="text-sm md:text-base text-gray-900 leading-relaxed whitespace-pre-wrap">${content}</div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    });
+                    div.innerHTML = html;
+                }
+                container.appendChild(div);
+            });
+            document.getElementById('detailModal').classList.remove('hidden');
+        }
+
+        function closeDetailModal() { document.getElementById('detailModal').classList.add('hidden'); }
+        function openCategoryManager() { renderCatList(); document.getElementById('categoryModal').classList.remove('hidden'); }
+        function closeCategoryManager() { document.getElementById('categoryModal').classList.add('hidden'); renderCategoryTabs(); }
+        function renderCatList() {
+            document.getElementById('categoryListContainer').innerHTML = categories.map((cat, i) => `
+                <div class="flex justify-between items-center bg-gray-50 px-3 py-2 rounded-xl text-sm border">
+                    <span class="font-bold text-gray-700">${cat}</span>
+                    <button onclick="categories.splice(${i},1);renderCatList();" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-trash text-xs"></i></button>
+                </div>
+            `).join('');
+        }
+        function addNewCategory() {
+            const val = document.getElementById('newCategoryName').value.trim();
+            if (val && !categories.includes(val)) { categories.push(val); document.getElementById('newCategoryName').value = ''; renderCatList(); saveData(); }
+        }
+    </script>
+</body>
+</html>
